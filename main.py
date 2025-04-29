@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 
 # 加载 .env 文件
 load_dotenv()
+API_KEY_DEV = os.getenv("INSTACART_API_KEY_DEV")
 API_KEY = os.getenv("INSTACART_API_KEY")
+IS_PROD = os.getenv("IS_PROD", "").lower() == "true"
 
 mcp = FastMCP("instacart-server")
 
@@ -60,15 +62,14 @@ async def create_shopping_list(request: ShoppingListRequest) -> str:
         - A URL to the Instacart shopping list that users can click to view and order the items
     """
 
-    return "shopping_list"
-    # data = {
-    #     **request.dict(exclude_none=True),
-    #     "link_type": "shopping_list"
-    # }
-    # return await _call_instacart_api(
-    #     endpoint="products/products_link",
-    #     data=data
-    # )
+    data = {
+        **request.dict(exclude_none=True),
+        "link_type": "shopping_list"
+    }
+    return await _call_instacart_api(
+        endpoint="products/products_link",
+        data=data
+    )
 
 @mcp.tool()
 async def create_recipe(request: RecipeRequest) -> str:
@@ -89,7 +90,6 @@ async def create_recipe(request: RecipeRequest) -> str:
         Returns:
         - A URL to the recipe on Instacart, with an option to add all ingredients to cart
     """
-    return "123"
     return await _call_instacart_api(
         endpoint="products/recipe",
         data=request.dict(exclude_none=True)
@@ -99,14 +99,23 @@ async def create_recipe(request: RecipeRequest) -> str:
 # 统一API调用
 async def _call_instacart_api(endpoint: str, data: dict) -> str:
     async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"https://connect.instacart.com/idp/v1/{endpoint}",
-            json=data,
-            headers={"Authorization": f"Bearer {API_KEY}"},
-            timeout=30.0
-        )
+        if IS_PROD:
+            response = await client.post(
+                f"https://connect.instacart.com/idp/v1/{endpoint}",
+                json=data,
+                headers={"Authorization": f"Bearer {API_KEY}"},
+                timeout=30.0
+            )
+        else:
+            response = await client.post(
+                f"https://connect.dev.instacart.tools/idp/v1/{endpoint}",
+                json=data,
+                headers={"Authorization": f"Bearer {API_KEY_DEV}"},
+                timeout=30.0
+            )
         response.raise_for_status()
         return response.json()["products_link_url"]
+        
 
 if __name__ == "__main__":
     mcp.run("sse")
